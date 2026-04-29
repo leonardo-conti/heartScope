@@ -117,7 +117,10 @@ export function compareGroups(rows, key) {
     label,
     chdRate: percentage(groupRows, (row) => row.TenYearCHD === 1),
     avgAge: mean(groupRows, 'age') ?? 0,
+    avgCholesterol: mean(groupRows, 'totChol') ?? 0,
     avgSysBP: mean(groupRows, 'sysBP') ?? 0,
+    avgBMI: mean(groupRows, 'BMI') ?? 0,
+    avgGlucose: mean(groupRows, 'glucose') ?? 0,
     sampleSize: groupRows.length,
   })
 

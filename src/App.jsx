@@ -73,6 +73,7 @@ function App() {
   const [rows, setRows] = useState([])
   const [fileName, setFileName] = useState('No file loaded')
   const [selectedRiskFactor, setSelectedRiskFactor] = useState('age')
+  const [selectedComparison, setSelectedComparison] = useState('smoking')
   const [filters, setFilters] = useState({
     minAge: 30,
     maxAge: 80,
@@ -128,6 +129,41 @@ function App() {
     () => compareGroups(filteredRows, 'currentSmoker'),
     [filteredRows],
   )
+  const compareDiabetes = useMemo(
+    () => compareGroups(filteredRows, 'diabetes'),
+    [filteredRows],
+  )
+  const compareHypertension = useMemo(
+    () => compareGroups(filteredRows, 'prevalentHyp'),
+    [filteredRows],
+  )
+
+  const comparisonSections = [
+    {
+      key: 'smoking',
+      title: 'Smokers vs Non-smokers',
+      noLabel: 'Non-smoker',
+      yesLabel: 'Smoker',
+      data: compareSmoker,
+    },
+    {
+      key: 'diabetes',
+      title: 'Diabetic vs Non-diabetic',
+      noLabel: 'Non-diabetic',
+      yesLabel: 'Diabetic',
+      data: compareDiabetes,
+    },
+    {
+      key: 'hypertension',
+      title: 'Hypertensive vs Non-hypertensive',
+      noLabel: 'Non-hypertensive',
+      yesLabel: 'Hypertensive',
+      data: compareHypertension,
+    },
+  ]
+  const activeComparison =
+    comparisonSections.find((section) => section.key === selectedComparison) ??
+    comparisonSections[0]
 
   const handleLoadBundled = () => {
     const parsedRows = parseCsvText(bundledCsv)
@@ -318,15 +354,44 @@ function App() {
 
         <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900">Compare Groups (Stretch)</h3>
-          {compareSmoker.map((group) => (
-            <div key={group.label} className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-              <p className="font-semibold">{group.label === 'Yes' ? 'Smoker' : 'Non-smoker'}</p>
-              <p>Sample size: {group.sampleSize}</p>
-              <p>CHD rate: {formatNumber(group.chdRate)}%</p>
-              <p>Avg age: {formatNumber(group.avgAge)}</p>
-              <p>Avg systolic BP: {formatNumber(group.avgSysBP)}</p>
+          <select
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            value={selectedComparison}
+            onChange={(event) => setSelectedComparison(event.target.value)}
+          >
+            {comparisonSections.map((section) => (
+              <option key={section.key} value={section.key}>
+                {section.title}
+              </option>
+            ))}
+          </select>
+
+          <div className="rounded-lg border border-slate-200 p-3">
+            <p className="mb-2 text-sm font-semibold text-slate-800">{activeComparison.title}</p>
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+                <p className="font-semibold">{activeComparison.noLabel}</p>
+                <p>Sample size: {activeComparison.data[0].sampleSize}</p>
+                <p>CHD rate: {formatNumber(activeComparison.data[0].chdRate)}%</p>
+                <p>Avg age: {formatNumber(activeComparison.data[0].avgAge)}</p>
+                <p>Avg cholesterol: {formatNumber(activeComparison.data[0].avgCholesterol)}</p>
+                <p>Avg systolic BP: {formatNumber(activeComparison.data[0].avgSysBP)}</p>
+                <p>Avg BMI: {formatNumber(activeComparison.data[0].avgBMI)}</p>
+                <p>Avg glucose: {formatNumber(activeComparison.data[0].avgGlucose)}</p>
+              </div>
+
+              <div className="rounded-lg bg-indigo-50 p-3 text-xs text-indigo-800">
+                <p className="font-semibold">{activeComparison.yesLabel}</p>
+                <p>Sample size: {activeComparison.data[1].sampleSize}</p>
+                <p>CHD rate: {formatNumber(activeComparison.data[1].chdRate)}%</p>
+                <p>Avg age: {formatNumber(activeComparison.data[1].avgAge)}</p>
+                <p>Avg cholesterol: {formatNumber(activeComparison.data[1].avgCholesterol)}</p>
+                <p>Avg systolic BP: {formatNumber(activeComparison.data[1].avgSysBP)}</p>
+                <p>Avg BMI: {formatNumber(activeComparison.data[1].avgBMI)}</p>
+                <p>Avg glucose: {formatNumber(activeComparison.data[1].avgGlucose)}</p>
+              </div>
             </div>
-          ))}
+          </div>
         </section>
       </section>
 
