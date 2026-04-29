@@ -1,0 +1,345 @@
+import { useMemo, useState } from 'react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import bundledCsv from './data/framingham_heart_study.csv?raw'
+import ChartCard from './components/ChartCard'
+import DataTable from './components/DataTable'
+import FilterPanel from './components/FilterPanel'
+import InsightPanel from './components/InsightPanel'
+import MetricCard from './components/MetricCard'
+import {
+  bmiGlucoseScatter,
+  bpScatter,
+  chdRateByAgeGroup,
+  chdRateBySmoking,
+  cholesterolByChd,
+  compareGroups,
+  riskFactorBins,
+} from './utils/chartTransforms'
+import { getAvailableRanges, parseCsvText } from './utils/dataCleaning'
+import { formatNumber, mean, pearsonCorrelation, percentage } from './utils/stats'
+
+const RISK_FACTORS = [
+  { label: 'Age', key: 'age' },
+  { label: 'Total Cholesterol', key: 'totChol' },
+  { label: 'Systolic BP', key: 'sysBP' },
+  { label: 'BMI', key: 'BMI' },
+  { label: 'Glucose', key: 'glucose' },
+  { label: 'Cigarettes / Day', key: 'cigsPerDay' },
+]
+
+function applyFilters(rows, filters) {
+  return rows.filter((row) => {
+    if (row.age !== null && (row.age < filters.minAge || row.age > filters.maxAge)) {
+      return false
+    }
+    if (filters.sex === 'male' && row.male !== 1) return false
+    if (filters.sex === 'female' && row.male !== 0) return false
+    if (filters.smoker === 'yes' && row.currentSmoker !== 1) return false
+    if (filters.smoker === 'no' && row.currentSmoker !== 0) return false
+    if (filters.diabetes === 'yes' && row.diabetes !== 1) return false
+    if (filters.diabetes === 'no' && row.diabetes !== 0) return false
+    if (filters.hypertension === 'yes' && row.prevalentHyp !== 1) return false
+    if (filters.hypertension === 'no' && row.prevalentHyp !== 0) return false
+    if (filters.chdOutcome === 'yes' && row.TenYearCHD !== 1) return false
+    if (filters.chdOutcome === 'no' && row.TenYearCHD !== 0) return false
+    return true
+  })
+}
+
+function makeInsightCards(rows) {
+  const smokerGroups = compareGroups(rows, 'currentSmoker')
+  const diabetesGroups = compareGroups(rows, 'diabetes')
+  const hypGroups = compareGroups(rows, 'prevalentHyp')
+
+  return [
+    `Smokers CHD rate: ${formatNumber(smokerGroups[1].chdRate)}% vs non-smokers ${formatNumber(smokerGroups[0].chdRate)}%.`,
+    `Diabetes CHD rate: ${formatNumber(diabetesGroups[1].chdRate)}% vs non-diabetic ${formatNumber(diabetesGroups[0].chdRate)}%.`,
+    `Hypertension CHD rate: ${formatNumber(hypGroups[1].chdRate)}% vs no hypertension ${formatNumber(hypGroups[0].chdRate)}%.`,
+  ]
+}
+
+function App() {
+  const [rows, setRows] = useState([])
+  const [fileName, setFileName] = useState('No file loaded')
+  const [selectedRiskFactor, setSelectedRiskFactor] = useState('age')
+  const [filters, setFilters] = useState({
+    minAge: 30,
+    maxAge: 80,
+    sex: 'all',
+    smoker: 'all',
+    diabetes: 'all',
+    hypertension: 'all',
+    chdOutcome: 'all',
+  })
+
+  const ranges = useMemo(() => getAvailableRanges(rows), [rows])
+
+  const filteredRows = useMemo(() => applyFilters(rows, filters), [rows, filters])
+
+  const overview = useMemo(
+    () => ({
+      rowCount: rows.length,
+      columnCount: rows.length > 0 ? Object.keys(rows[0]).length - 1 : 16,
+      chdPercent: percentage(rows, (row) => row.TenYearCHD === 1),
+      avgAge: mean(rows, 'age'),
+      avgCholesterol: mean(rows, 'totChol'),
+      avgSysBP: mean(rows, 'sysBP'),
+    }),
+    [rows],
+  )
+
+  const insightStats = useMemo(
+    () => ({
+      sampleSize: filteredRows.length,
+      chdRate: percentage(filteredRows, (row) => row.TenYearCHD === 1),
+      avgAge: mean(filteredRows, 'age'),
+      avgCholesterol: mean(filteredRows, 'totChol'),
+      avgSysBP: mean(filteredRows, 'sysBP'),
+      avgBMI: mean(filteredRows, 'BMI'),
+      avgGlucose: mean(filteredRows, 'glucose'),
+    }),
+    [filteredRows],
+  )
+
+  const correlations = useMemo(
+    () => [
+      { label: 'Age', value: pearsonCorrelation(filteredRows, 'age', 'TenYearCHD') },
+      { label: 'Cholesterol', value: pearsonCorrelation(filteredRows, 'totChol', 'TenYearCHD') },
+      { label: 'Systolic BP', value: pearsonCorrelation(filteredRows, 'sysBP', 'TenYearCHD') },
+      { label: 'BMI', value: pearsonCorrelation(filteredRows, 'BMI', 'TenYearCHD') },
+      { label: 'Glucose', value: pearsonCorrelation(filteredRows, 'glucose', 'TenYearCHD') },
+      { label: 'Cigs/Day', value: pearsonCorrelation(filteredRows, 'cigsPerDay', 'TenYearCHD') },
+    ],
+    [filteredRows],
+  )
+
+  const compareSmoker = useMemo(
+    () => compareGroups(filteredRows, 'currentSmoker'),
+    [filteredRows],
+  )
+
+  const handleLoadBundled = () => {
+    const parsedRows = parseCsvText(bundledCsv)
+    setRows(parsedRows)
+    const nextRanges = getAvailableRanges(parsedRows)
+    setFilters((prev) => ({ ...prev, minAge: nextRanges.minAge, maxAge: nextRanges.maxAge }))
+    setFileName('Bundled Framingham dataset')
+  }
+
+  const handleUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const text = await file.text()
+    const parsedRows = parseCsvText(text)
+    setRows(parsedRows)
+    const nextRanges = getAvailableRanges(parsedRows)
+    setFilters((prev) => ({ ...prev, minAge: nextRanges.minAge, maxAge: nextRanges.maxAge }))
+    setFileName(file.name)
+  }
+
+  return (
+    <main className="mx-auto min-h-screen max-w-7xl p-4 md:p-6">
+      <header className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">
+          HeartScope: Interactive Heart Risk Explorer
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Explore Framingham risk factors and outcome relationships in a clean analytics dashboard.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleLoadBundled}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            Load Bundled CSV
+          </button>
+          <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+            Upload CSV
+            <input type="file" accept=".csv" className="hidden" onChange={handleUpload} />
+          </label>
+          <span className="self-center text-xs text-slate-500">Source: {fileName}</span>
+        </div>
+      </header>
+
+      <section className="mb-6 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <MetricCard label="Rows" value={overview.rowCount} />
+        <MetricCard label="Columns" value={overview.columnCount} />
+        <MetricCard label="CHD %" value={`${formatNumber(overview.chdPercent)}%`} />
+        <MetricCard label="Avg Age" value={formatNumber(overview.avgAge)} />
+        <MetricCard label="Avg Cholesterol" value={formatNumber(overview.avgCholesterol)} />
+        <MetricCard label="Avg Systolic BP" value={formatNumber(overview.avgSysBP)} />
+      </section>
+
+      <div className="mb-6">
+        <FilterPanel filters={filters} setFilters={setFilters} ranges={ranges} />
+      </div>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <ChartCard
+          title="CHD Rate by Age Group"
+          description="Outcome percentage across age bins in the filtered sample."
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chdRateByAgeGroup(filteredRows)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="ageGroup" />
+              <YAxis unit="%" />
+              <Tooltip />
+              <Bar dataKey="chdRate" fill="#6366f1" />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard
+          title="CHD Rate by Smoking Status"
+          description="Compares smoker and non-smoker outcome rates."
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chdRateBySmoking(filteredRows)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="group" />
+              <YAxis unit="%" />
+              <Tooltip />
+              <Bar dataKey="chdRate" fill="#14b8a6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard
+          title="Cholesterol Distribution by CHD Outcome"
+          description="Each point is one patient with non-missing total cholesterol."
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="totChol"
+                name="Total Cholesterol"
+                type="number"
+                domain={['auto', 'auto']}
+              />
+              <YAxis dataKey="outcome" type="category" name="Outcome" />
+              <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+              <Scatter data={cholesterolByChd(filteredRows)} fill="#f97316" />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard
+          title="Systolic BP vs Diastolic BP"
+          description="Blood pressure relationships grouped by outcome."
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="sysBP" name="Systolic BP" type="number" domain={['auto', 'auto']} />
+              <YAxis dataKey="diaBP" name="Diastolic BP" type="number" domain={['auto', 'auto']} />
+              <Tooltip />
+              <Legend />
+              <Scatter name="No CHD" data={bpScatter(filteredRows).filter((d) => d.outcome === 'No CHD')} fill="#22c55e" />
+              <Scatter name="CHD" data={bpScatter(filteredRows).filter((d) => d.outcome === 'CHD')} fill="#ef4444" />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard
+          title="BMI vs Glucose"
+          description="Scatterplot with CHD groups where both BMI and glucose are available."
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="BMI" name="BMI" type="number" domain={['auto', 'auto']} />
+              <YAxis dataKey="glucose" name="Glucose" type="number" domain={['auto', 'auto']} />
+              <Tooltip />
+              <Legend />
+              <Scatter
+                name="No CHD"
+                data={bmiGlucoseScatter(filteredRows).filter((d) => d.outcome === 'No CHD')}
+                fill="#0ea5e9"
+              />
+              <Scatter
+                name="CHD"
+                data={bmiGlucoseScatter(filteredRows).filter((d) => d.outcome === 'CHD')}
+                fill="#a855f7"
+              />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard
+          title="Risk Factor Explorer (Stretch)"
+          description="How CHD rate changes across bins for selected variable."
+        >
+          <div className="mb-3">
+            <select
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              value={selectedRiskFactor}
+              onChange={(event) => setSelectedRiskFactor(event.target.value)}
+            >
+              {RISK_FACTORS.map((factor) => (
+                <option key={factor.key} value={factor.key}>
+                  {factor.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <ResponsiveContainer width="100%" height="85%">
+            <BarChart data={riskFactorBins(filteredRows, selectedRiskFactor)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="range" />
+              <YAxis unit="%" />
+              <Tooltip />
+              <Bar dataKey="chdRate" fill="#8b5cf6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </section>
+
+      <section className="mt-6 grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+        <InsightPanel
+          stats={insightStats}
+          correlations={correlations}
+          insightCards={makeInsightCards(filteredRows)}
+        />
+
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Compare Groups (Stretch)</h3>
+          {compareSmoker.map((group) => (
+            <div key={group.label} className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+              <p className="font-semibold">{group.label === 'Yes' ? 'Smoker' : 'Non-smoker'}</p>
+              <p>Sample size: {group.sampleSize}</p>
+              <p>CHD rate: {formatNumber(group.chdRate)}%</p>
+              <p>Avg age: {formatNumber(group.avgAge)}</p>
+              <p>Avg systolic BP: {formatNumber(group.avgSysBP)}</p>
+            </div>
+          ))}
+        </section>
+      </section>
+
+      <section className="mt-6">
+        <DataTable rows={filteredRows} />
+      </section>
+
+      <footer className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        This dashboard is for exploratory data analysis only and is not medical advice. It
+        shows relationships in historical Framingham data and is not a clinical diagnosis tool.
+      </footer>
+    </main>
+  )
+}
+
+export default App
