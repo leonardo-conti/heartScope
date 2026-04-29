@@ -19,8 +19,8 @@ import FilterPanel from './components/FilterPanel'
 import InsightPanel from './components/InsightPanel'
 import MetricCard from './components/MetricCard'
 import {
-  bmiGlucoseScatter,
   bpScatter,
+  chdHeatmapByBmiGlucose,
   cholesterolBoxPlotByOutcome,
   chdRateByAgeGroup,
   chdRateBySmoking,
@@ -136,6 +136,10 @@ function App() {
   )
   const compareHypertension = useMemo(
     () => compareGroups(filteredRows, 'prevalentHyp'),
+    [filteredRows],
+  )
+  const bmiGlucoseHeatmap = useMemo(
+    () => chdHeatmapByBmiGlucose(filteredRows),
     [filteredRows],
   )
 
@@ -300,28 +304,50 @@ function App() {
         </ChartCard>
 
         <ChartCard
-          title="BMI vs Glucose"
-          description="Scatterplot with CHD groups where both BMI and glucose are available."
+          title="CHD Risk by BMI + Glucose"
+          description="Heatmap of CHD rate (%) across BMI and glucose bins."
         >
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="BMI" name="BMI" type="number" domain={['auto', 'auto']} />
-              <YAxis dataKey="glucose" name="Glucose" type="number" domain={['auto', 'auto']} />
-              <Tooltip />
-              <Legend />
-              <Scatter
-                name="No CHD"
-                data={bmiGlucoseScatter(filteredRows).filter((d) => d.outcome === 'No CHD')}
-                fill="#0ea5e9"
-              />
-              <Scatter
-                name="CHD"
-                data={bmiGlucoseScatter(filteredRows).filter((d) => d.outcome === 'CHD')}
-                fill="#a855f7"
-              />
-            </ScatterChart>
-          </ResponsiveContainer>
+          <div className="h-full overflow-auto">
+            <div className="mb-2 text-xs text-slate-500">Rows: glucose bins | Columns: BMI bins</div>
+            <div
+              className="grid gap-1"
+              style={{
+                gridTemplateColumns: `80px repeat(${bmiGlucoseHeatmap.bmiLabels.length || 1}, minmax(56px, 1fr))`,
+              }}
+            >
+              <div />
+              {bmiGlucoseHeatmap.bmiLabels.map((label) => (
+                <div key={label} className="text-center text-[10px] text-slate-600">
+                  {label}
+                </div>
+              ))}
+
+              {bmiGlucoseHeatmap.cells.map((rowCells, rowIdx) => (
+                <div key={bmiGlucoseHeatmap.glucoseLabels[rowIdx]} className="contents">
+                  <div className="pr-1 text-right text-[10px] text-slate-600">
+                    {bmiGlucoseHeatmap.glucoseLabels[rowIdx]}
+                  </div>
+                  {rowCells.map((cell) => {
+                    const intensity = Math.min(1, cell.chdRate / 35)
+                    const bgColor = `rgba(239, 68, 68, ${0.12 + intensity * 0.78})`
+                    return (
+                      <div
+                        key={`${cell.glucoseIdx}-${cell.bmiIdx}`}
+                        className="flex h-10 items-center justify-center rounded text-[10px] font-semibold text-slate-900"
+                        style={{ backgroundColor: bgColor }}
+                        title={`BMI ${cell.bmiLabel}, Glucose ${cell.glucoseLabel}, CHD ${formatNumber(cell.chdRate)}%, n=${cell.sampleSize}`}
+                      >
+                        {cell.sampleSize > 0 ? `${formatNumber(cell.chdRate)}%` : 'NA'}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 text-[10px] text-slate-500">
+              Darker red means higher CHD rate in that BMI+glucose segment.
+            </div>
+          </div>
         </ChartCard>
 
         <ChartCard

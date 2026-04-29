@@ -137,6 +137,71 @@ export function bmiGlucoseScatter(rows) {
     }))
 }
 
+export function chdHeatmapByBmiGlucose(rows) {
+  const valid = rows.filter(
+    (row) =>
+      Number.isFinite(row.BMI) &&
+      Number.isFinite(row.glucose) &&
+      Number.isFinite(row.TenYearCHD),
+  )
+
+  if (valid.length === 0) {
+    return { bmiLabels: [], glucoseLabels: [], cells: [] }
+  }
+
+  const bmiBinCount = 6
+  const glucoseBinCount = 6
+  const bmiValues = valid.map((row) => row.BMI)
+  const glucoseValues = valid.map((row) => row.glucose)
+  const bmiMin = Math.min(...bmiValues)
+  const bmiMax = Math.max(...bmiValues)
+  const glucoseMin = Math.min(...glucoseValues)
+  const glucoseMax = Math.max(...glucoseValues)
+  const bmiStep = (bmiMax - bmiMin) / bmiBinCount || 1
+  const glucoseStep = (glucoseMax - glucoseMin) / glucoseBinCount || 1
+
+  const grid = Array.from({ length: glucoseBinCount }, () =>
+    Array.from({ length: bmiBinCount }, () => ({ total: 0, chd: 0 })),
+  )
+
+  valid.forEach((row) => {
+    const rawBmiIdx = Math.floor((row.BMI - bmiMin) / bmiStep)
+    const rawGlucoseIdx = Math.floor((row.glucose - glucoseMin) / glucoseStep)
+    const bmiIdx = Math.max(0, Math.min(bmiBinCount - 1, rawBmiIdx))
+    const glucoseIdx = Math.max(0, Math.min(glucoseBinCount - 1, rawGlucoseIdx))
+
+    grid[glucoseIdx][bmiIdx].total += 1
+    if (row.TenYearCHD === 1) {
+      grid[glucoseIdx][bmiIdx].chd += 1
+    }
+  })
+
+  const bmiLabels = Array.from({ length: bmiBinCount }, (_, idx) => {
+    const start = bmiMin + idx * bmiStep
+    const end = idx === bmiBinCount - 1 ? bmiMax : start + bmiStep
+    return `${start.toFixed(1)}-${end.toFixed(1)}`
+  })
+
+  const glucoseLabels = Array.from({ length: glucoseBinCount }, (_, idx) => {
+    const start = glucoseMin + idx * glucoseStep
+    const end = idx === glucoseBinCount - 1 ? glucoseMax : start + glucoseStep
+    return `${start.toFixed(0)}-${end.toFixed(0)}`
+  })
+
+  const cells = grid.map((row, glucoseIdx) =>
+    row.map((cell, bmiIdx) => ({
+      bmiIdx,
+      glucoseIdx,
+      bmiLabel: bmiLabels[bmiIdx],
+      glucoseLabel: glucoseLabels[glucoseIdx],
+      sampleSize: cell.total,
+      chdRate: cell.total > 0 ? (cell.chd / cell.total) * 100 : 0,
+    })),
+  )
+
+  return { bmiLabels, glucoseLabels, cells }
+}
+
 export function riskFactorBins(rows, factorKey) {
   const values = rows.map((row) => row[factorKey]).filter((v) => v !== null)
   if (values.length === 0) return []
