@@ -3,6 +3,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   ResponsiveContainer,
   Scatter,
@@ -20,9 +21,9 @@ import MetricCard from './components/MetricCard'
 import {
   bmiGlucoseScatter,
   bpScatter,
+  cholesterolBoxPlotByOutcome,
   chdRateByAgeGroup,
   chdRateBySmoking,
-  cholesterolByChd,
   compareGroups,
   riskFactorBins,
 } from './utils/chartTransforms'
@@ -256,21 +257,28 @@ function App() {
 
         <ChartCard
           title="Cholesterol Distribution by CHD Outcome"
-          description="Each point is one patient with non-missing total cholesterol."
+          description="Box plot style summary (min, Q1, median, Q3, max) by outcome."
         >
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart>
+            <ComposedChart data={cholesterolBoxPlotByOutcome(filteredRows)}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="totChol"
-                name="Total Cholesterol"
+              <XAxis dataKey="outcome" type="category" />
+              <YAxis
                 type="number"
-                domain={['auto', 'auto']}
+                name="Total Cholesterol"
+                domain={['dataMin - 10', 'dataMax + 10']}
               />
-              <YAxis dataKey="outcome" type="category" name="Outcome" />
               <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-              <Scatter data={cholesterolByChd(filteredRows)} fill="#f97316" />
-            </ScatterChart>
+              <Legend />
+
+              <Bar dataKey="rangeBase" stackId="range" fill="transparent" />
+              <Bar dataKey="rangeHeight" stackId="range" fill="#94a3b8" barSize={8} name="Min-Max Range" />
+
+              <Bar dataKey="iqrBase" stackId="iqr" fill="transparent" />
+              <Bar dataKey="iqrHeight" stackId="iqr" fill="#f97316" barSize={28} name="IQR (Q1-Q3)" />
+
+              <Scatter dataKey="median" fill="#111827" name="Median" />
+            </ComposedChart>
           </ResponsiveContainer>
         </ChartCard>
 

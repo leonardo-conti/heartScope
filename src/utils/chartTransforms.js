@@ -55,6 +55,63 @@ export function cholesterolByChd(rows) {
   }))
 }
 
+function quantile(sortedValues, q) {
+  if (sortedValues.length === 0) return null
+  const pos = (sortedValues.length - 1) * q
+  const base = Math.floor(pos)
+  const rest = pos - base
+  if (sortedValues[base + 1] === undefined) return sortedValues[base]
+  return sortedValues[base] + rest * (sortedValues[base + 1] - sortedValues[base])
+}
+
+export function cholesterolBoxPlotByOutcome(rows) {
+  const groups = [
+    { label: 'No CHD', value: 0 },
+    { label: 'CHD', value: 1 },
+  ]
+
+  return groups.map((group) => {
+    const values = rows
+      .filter((row) => row.TenYearCHD === group.value && Number.isFinite(row.totChol))
+      .map((row) => row.totChol)
+      .sort((a, b) => a - b)
+
+    if (values.length === 0) {
+      return {
+        outcome: group.label,
+        min: 0,
+        q1: 0,
+        median: 0,
+        q3: 0,
+        max: 0,
+        rangeBase: 0,
+        rangeHeight: 0,
+        iqrBase: 0,
+        iqrHeight: 0,
+      }
+    }
+
+    const min = values[0]
+    const q1 = quantile(values, 0.25)
+    const median = quantile(values, 0.5)
+    const q3 = quantile(values, 0.75)
+    const max = values[values.length - 1]
+
+    return {
+      outcome: group.label,
+      min,
+      q1,
+      median,
+      q3,
+      max,
+      rangeBase: min,
+      rangeHeight: max - min,
+      iqrBase: q1,
+      iqrHeight: q3 - q1,
+    }
+  })
+}
+
 export function bpScatter(rows) {
   return rows
     .filter(
