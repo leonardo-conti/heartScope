@@ -48,10 +48,10 @@ This project is optimized for interviews:
 ## 5) AI Tools Used
 - **Claude:** planning, component scaffolding, debugging chart/data logic
 - **Cursor:** code generation, inline refactoring, fixing bugs
-- **ChatGPT:** project strategy, feature selection, interview positioning
+- **ChatGPT:** project strategy, feature selection
 
 ## 6) Key Design Decisions
-- **No backend:** minimized complexity and deployment friction for interview context.
+- **No backend:** minimized complexity and deployment friction.
 - **Single source of truth for data:** all charts/stats derive from the same filtered dataset.
 - **Small reusable components:** easier to explain and maintain.
 - **Explicit helper functions:** chart transforms and stats are separated from UI for readability.
@@ -75,27 +75,3 @@ This project is optimized for interviews:
 - Add unit tests for `stats.js` and `chartTransforms.js`.
 - Add URL-synced filter state for shareable dashboard views.
 - Add chart download/export and report snapshots.
-- Add stronger table features (sorting, pagination, column toggles).
-- Add optional lightweight educational risk score panel with transparent formula details.
-
-## 10) Interview Walkthrough Script
-1. **Context (30 sec):** “I built HeartScope to explore relationships in the Framingham dataset using an explainable frontend-only architecture.”
-2. **Architecture (1 min):** “`App.jsx` handles state and orchestration; utilities own transformations/stats; components are presentation-focused.”
-3. **Data flow (1 min):**
-   - load/upload CSV
-   - parse and clean to typed rows
-   - apply interactive filters
-   - derive chart/stat outputs from filtered rows
-4. **Core features demo (2 min):**
-   - metrics overview
-   - filter panel
-   - required charts
-   - insight panel with correlations
-5. **Stretch demo (1 min):**
-   - risk factor explorer
-   - compare groups
-   - auto insight cards
-6. **Judgment discussion (1 min):**
-   - missing data strategy
-   - tradeoffs from keeping no backend
-   - clear disclaimer: EDA, not medical advice

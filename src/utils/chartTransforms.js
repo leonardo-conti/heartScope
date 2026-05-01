@@ -146,7 +146,7 @@ export function chdHeatmapByBmiGlucose(rows) {
   )
 
   if (valid.length === 0) {
-    return { bmiLabels: [], glucoseLabels: [], cells: [] }
+    return { bmiLabels: [], glucoseLabels: [], cells: [], totalUsed: 0 }
   }
 
   const bmiBinCount = 6
@@ -199,7 +199,7 @@ export function chdHeatmapByBmiGlucose(rows) {
     })),
   )
 
-  return { bmiLabels, glucoseLabels, cells }
+  return { bmiLabels, glucoseLabels, cells, totalUsed: valid.length }
 }
 
 export function riskFactorBins(rows, factorKey) {

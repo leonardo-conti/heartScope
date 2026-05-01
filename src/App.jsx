@@ -39,6 +39,38 @@ const RISK_FACTORS = [
   { label: 'Cigarettes / Day', key: 'cigsPerDay' },
 ]
 
+const TRACKED_FIELDS = [
+  'education',
+  'cigsPerDay',
+  'BPMeds',
+  'totChol',
+  'BMI',
+  'heartRate',
+  'glucose',
+]
+
+const SEX_LABELS = {
+  male: 'Male',
+  female: 'Female',
+}
+
+const BINARY_FILTER_LABELS = {
+  yes: 'Yes',
+  no: 'No',
+}
+
+function getDefaultFilters(ranges) {
+  return {
+    minAge: ranges.minAge,
+    maxAge: ranges.maxAge,
+    sex: 'all',
+    smoker: 'all',
+    diabetes: 'all',
+    hypertension: 'all',
+    chdOutcome: 'all',
+  }
+}
+
 function applyFilters(rows, filters) {
   return rows.filter((row) => {
     if (row.age !== null && (row.age < filters.minAge || row.age > filters.maxAge)) {
@@ -75,17 +107,10 @@ function App() {
   const [fileName, setFileName] = useState('No file loaded')
   const [selectedRiskFactor, setSelectedRiskFactor] = useState('age')
   const [selectedComparison, setSelectedComparison] = useState('smoking')
-  const [filters, setFilters] = useState({
-    minAge: 30,
-    maxAge: 80,
-    sex: 'all',
-    smoker: 'all',
-    diabetes: 'all',
-    hypertension: 'all',
-    chdOutcome: 'all',
-  })
+  const [filters, setFilters] = useState(getDefaultFilters({ minAge: 30, maxAge: 80 }))
 
   const ranges = useMemo(() => getAvailableRanges(rows), [rows])
+  const defaultFilters = useMemo(() => getDefaultFilters(ranges), [ranges])
 
   const filteredRows = useMemo(() => applyFilters(rows, filters), [rows, filters])
 
@@ -142,6 +167,80 @@ function App() {
     () => chdHeatmapByBmiGlucose(filteredRows),
     [filteredRows],
   )
+  const activeFilterChips = useMemo(() => {
+    const chips = []
+    if (filters.minAge !== defaultFilters.minAge || filters.maxAge !== defaultFilters.maxAge) {
+      chips.push({
+        key: 'age',
+        label: `Age ${filters.minAge}-${filters.maxAge}`,
+      })
+    }
+    if (filters.sex !== 'all') {
+      chips.push({ key: 'sex', label: `Sex: ${SEX_LABELS[filters.sex]}` })
+    }
+    if (filters.smoker !== 'all') {
+      chips.push({ key: 'smoker', label: `Smoking: ${BINARY_FILTER_LABELS[filters.smoker]}` })
+    }
+    if (filters.diabetes !== 'all') {
+      chips.push({
+        key: 'diabetes',
+        label: `Diabetes: ${BINARY_FILTER_LABELS[filters.diabetes]}`,
+      })
+    }
+    if (filters.hypertension !== 'all') {
+      chips.push({
+        key: 'hypertension',
+        label: `Hypertension: ${BINARY_FILTER_LABELS[filters.hypertension]}`,
+      })
+    }
+    if (filters.chdOutcome !== 'all') {
+      chips.push({
+        key: 'chdOutcome',
+        label: `CHD Outcome: ${filters.chdOutcome === 'yes' ? 'Positive (1)' : 'Negative (0)'}`,
+      })
+    }
+    return chips
+  }, [filters, defaultFilters])
+
+  const dataQuality = useMemo(() => {
+    const missing = TRACKED_FIELDS.map((field) => {
+      const missingCount = rows.filter((row) => row[field] === null || row[field] === undefined).length
+      return {
+        field,
+        missingCount,
+        missingPct: rows.length > 0 ? (missingCount / rows.length) * 100 : 0,
+      }
+    }).filter((entry) => entry.missingCount > 0)
+
+    const chartUsage = [
+      {
+        chart: 'CHD by age group',
+        used: filteredRows.filter((row) => Number.isFinite(row.age)).length,
+      },
+      {
+        chart: 'CHD by smoking',
+        used: filteredRows.filter((row) => row.currentSmoker === 0 || row.currentSmoker === 1).length,
+      },
+      {
+        chart: 'Cholesterol box plot',
+        used: filteredRows.filter((row) => Number.isFinite(row.totChol)).length,
+      },
+      {
+        chart: 'SysBP vs DiaBP',
+        used: filteredRows.filter((row) => Number.isFinite(row.sysBP) && Number.isFinite(row.diaBP)).length,
+      },
+      {
+        chart: 'BMI + glucose heatmap',
+        used: bmiGlucoseHeatmap.totalUsed,
+      },
+      {
+        chart: 'Risk factor explorer',
+        used: filteredRows.filter((row) => Number.isFinite(row[selectedRiskFactor])).length,
+      },
+    ]
+
+    return { missing, chartUsage }
+  }, [rows, filteredRows, bmiGlucoseHeatmap.totalUsed, selectedRiskFactor])
 
   const comparisonSections = [
     {
@@ -169,12 +268,17 @@ function App() {
   const activeComparison =
     comparisonSections.find((section) => section.key === selectedComparison) ??
     comparisonSections[0]
+  const comparisonDelta = {
+    chdRate: activeComparison.data[1].chdRate - activeComparison.data[0].chdRate,
+    avgSysBP: activeComparison.data[1].avgSysBP - activeComparison.data[0].avgSysBP,
+    avgGlucose: activeComparison.data[1].avgGlucose - activeComparison.data[0].avgGlucose,
+  }
 
   const handleLoadBundled = () => {
     const parsedRows = parseCsvText(bundledCsv)
     setRows(parsedRows)
     const nextRanges = getAvailableRanges(parsedRows)
-    setFilters((prev) => ({ ...prev, minAge: nextRanges.minAge, maxAge: nextRanges.maxAge }))
+    setFilters(getDefaultFilters(nextRanges))
     setFileName('Bundled Framingham dataset')
   }
 
@@ -186,28 +290,57 @@ function App() {
     const parsedRows = parseCsvText(text)
     setRows(parsedRows)
     const nextRanges = getAvailableRanges(parsedRows)
-    setFilters((prev) => ({ ...prev, minAge: nextRanges.minAge, maxAge: nextRanges.maxAge }))
+    setFilters(getDefaultFilters(nextRanges))
     setFileName(file.name)
+  }
+
+  const handleResetAllFilters = () => {
+    if (activeFilterChips.length >= 3) {
+      const shouldReset = window.confirm(
+        `You have ${activeFilterChips.length} active filters. Clear them all?`,
+      )
+      if (!shouldReset) return
+    }
+    setFilters(defaultFilters)
+  }
+
+  const handleRemoveFilterChip = (chipKey) => {
+    if (chipKey === 'age') {
+      setFilters((prev) => ({
+        ...prev,
+        minAge: defaultFilters.minAge,
+        maxAge: defaultFilters.maxAge,
+      }))
+      return
+    }
+
+    setFilters((prev) => ({
+      ...prev,
+      [chipKey]: 'all',
+    }))
   }
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl p-4 md:p-6">
-      <header className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">
+      <header className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+        <div className="mb-3 inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+          Healthcare Analytics Dashboard
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
           HeartScope: Interactive Heart Risk Explorer
         </h1>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
           Explore Framingham risk factors and outcome relationships in a clean analytics dashboard.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
             onClick={handleLoadBundled}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
           >
             Load Bundled CSV
           </button>
-          <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+          <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50">
             Upload CSV
             <input type="file" accept=".csv" className="hidden" onChange={handleUpload} />
           </label>
@@ -227,6 +360,36 @@ function App() {
       <div className="mb-6">
         <FilterPanel filters={filters} setFilters={setFilters} ranges={ranges} />
       </div>
+      <section className="mb-6 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-900">Active Filters</h3>
+          <button
+            type="button"
+            className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+            onClick={handleResetAllFilters}
+          >
+            Reset All
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {activeFilterChips.length === 0 ? (
+            <p className="text-xs text-slate-500">No active filters. Showing full dataset range.</p>
+          ) : (
+            activeFilterChips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => handleRemoveFilterChip(chip.key)}
+                title="Click to remove this filter"
+                aria-label={`Remove ${chip.label} filter`}
+                className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs text-indigo-700 transition-colors hover:bg-indigo-100"
+              >
+                {chip.label} {'\u00D7'}
+              </button>
+            ))
+          )}
+        </div>
+      </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
         <ChartCard
@@ -347,6 +510,12 @@ function App() {
             <div className="mt-3 text-[10px] text-slate-500">
               Darker red means higher CHD rate in that BMI+glucose segment.
             </div>
+            <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-600">
+              <span className="font-medium">CHD Rate Scale</span>
+              <div className="h-2 w-28 rounded bg-gradient-to-r from-red-100 via-red-300 to-red-600" />
+              <span>Low</span>
+              <span>High</span>
+            </div>
           </div>
         </ChartCard>
 
@@ -426,7 +595,57 @@ function App() {
               </div>
             </div>
           </div>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+            <p className="font-semibold">Key Differences</p>
+            <p>
+              CHD rate difference ({activeComparison.yesLabel} - {activeComparison.noLabel}):{' '}
+              {comparisonDelta.chdRate >= 0 ? '+' : ''}
+              {formatNumber(comparisonDelta.chdRate)} percentage points
+            </p>
+            <p>
+              Avg systolic BP difference: {comparisonDelta.avgSysBP >= 0 ? '+' : ''}
+              {formatNumber(comparisonDelta.avgSysBP)}
+            </p>
+            <p>
+              Avg glucose difference: {comparisonDelta.avgGlucose >= 0 ? '+' : ''}
+              {formatNumber(comparisonDelta.avgGlucose)}
+            </p>
+          </div>
         </section>
+      </section>
+
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h3 className="text-lg font-semibold text-slate-900">Data Quality</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Missingness is calculated on loaded data. Chart usage shows rows included after filter and
+          field-level exclusions.
+        </p>
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="mb-2 text-sm font-semibold text-slate-800">Missing Values by Field</p>
+            <div className="space-y-1 text-xs text-slate-700">
+              {dataQuality.missing.map((entry) => (
+                <p key={entry.field} className="flex items-center justify-between gap-3">
+                  <span className="font-medium">{entry.field}</span>
+                  <span>
+                    {entry.missingCount} ({formatNumber(entry.missingPct)}%)
+                  </span>
+                </p>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="mb-2 text-sm font-semibold text-slate-800">Rows Used by Chart</p>
+            <div className="space-y-1 text-xs text-slate-700">
+              {dataQuality.chartUsage.map((entry) => (
+                <p key={entry.chart} className="flex items-center justify-between gap-3">
+                  <span className="font-medium">{entry.chart}</span>
+                  <span>{entry.used}</span>
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="mt-6">
