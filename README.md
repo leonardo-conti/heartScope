@@ -1,7 +1,7 @@
 # HeartScope: Interactive Heart Risk Explorer
 
 ## 1) Overview
-HeartScope is an interactive data visualization and statistical analysis app built on the Framingham Heart Study dataset. It helps users explore how risk factors (age, smoking, diabetes, blood pressure, cholesterol, BMI, glucose) relate to 10-year coronary heart disease (CHD) outcomes. Live link: heart-scope-delta.vercel.app
+HeartScope is an interactive data visualization and statistical analysis app built on the Framingham Heart Study dataset. It helps users explore how risk factors (age, smoking, diabetes, blood pressure, cholesterol, BMI, glucose) relate to 10-year coronary heart disease (CHD) outcomes. Live link: [heart-scope-delta.vercel.app](https://heart-scope-delta.vercel.app/)
 
 This project is optimized for interviews:
 - clear architecture
